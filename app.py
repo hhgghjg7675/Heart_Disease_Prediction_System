@@ -5,678 +5,827 @@ from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.metrics import accuracy_score, classification_report
-import json, warnings
-warnings.filterwarnings("ignore")
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_auc_score
+import warnings
+warnings.filterwarnings('ignore')
 
-# ── Page Config ───────────────────────────────────────────────────────────────
+# ─── Page Config ─────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Heart Disease Prediction System",
     page_icon="🫀",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
+# ─── Custom CSS (Glassmorphism + Transitions) ────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-*, *::before, *::after { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+/* Google Font */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
+* { font-family: 'Poppins', sans-serif; }
+
+/* Animated gradient background */
 .stApp {
-    background: linear-gradient(-45deg, #0d0d1a, #12122a, #1a0d2e, #0d1a2e);
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
     background-size: 400% 400%;
-    animation: bgShift 18s ease infinite;
+    animation: gradientShift 12s ease infinite;
     min-height: 100vh;
 }
-@keyframes bgShift {
+
+@keyframes gradientShift {
     0%   { background-position: 0% 50%; }
     50%  { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
 }
 
-/* Hide branding but keep sidebar toggle arrow */
-#MainMenu, footer, [data-testid="stDecoration"] {
-    visibility: hidden !important; display: none !important;
-}
-[data-testid="stToolbar"] { display: none !important; }
-
-/* Keep the header just for the sidebar collapse button */
-header[data-testid="stHeader"] {
-    background: transparent !important;
-    height: auto !important;
-}
-
-/* Style the sidebar toggle arrow button so it looks good */
-[data-testid="collapsedControl"] {
-    background: rgba(108, 92, 231, 0.25) !important;
-    border: 1px solid rgba(162, 155, 254, 0.35) !important;
-    border-radius: 0 12px 12px 0 !important;
-    color: #a29bfe !important;
-    transition: background 0.25s, transform 0.25s !important;
-    top: 1rem !important;
-}
-[data-testid="collapsedControl"]:hover {
-    background: rgba(108, 92, 231, 0.5) !important;
-    transform: scale(1.08) !important;
+/* ── Main title ── */
+.main-title {
+    text-align: center;
+    font-size: 2.6rem;
+    font-weight: 700;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.2rem;
+    animation: titleFade 1.2s ease-in;
 }
 
-.main .block-container {
-    max-width: 940px !important;
-    padding: 2rem 2rem 4rem !important;
-    margin: 0 auto !important;
+@keyframes titleFade {
+    from { opacity: 0; transform: translateY(-20px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Hero */
-.hero-wrap { text-align:center; padding:2.2rem 0 0.3rem; animation: fadeDown 0.9s both; }
-@keyframes fadeDown {
-    from { opacity:0; transform:translateY(-24px); }
-    to   { opacity:1; transform:translateY(0); }
-}
-.hero-icon { font-size:3.4rem; display:block; margin-bottom:0.4rem; animation: heartBeat 1.8s ease-in-out infinite; }
-@keyframes heartBeat {
-    0%,100%{transform:scale(1)} 14%{transform:scale(1.14)} 28%{transform:scale(1)} 42%{transform:scale(1.08)} 70%{transform:scale(1)}
-}
-.hero-title {
-    font-size:clamp(1.7rem,4vw,2.7rem); font-weight:800; margin:0 0 0.35rem;
-    background:linear-gradient(110deg,#ff6b6b 0%,#feca57 35%,#a29bfe 70%,#74b9ff 100%);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-    letter-spacing:-0.5px;
-}
-.hero-sub { font-size:0.93rem; color:rgba(255,255,255,0.42); margin:0 0 1.8rem; }
-
-/* Stat pills */
-.stat-row { display:flex; justify-content:center; gap:10px; flex-wrap:wrap; margin-bottom:2.2rem; animation:fadeUp 0.8s 0.2s both; }
-@keyframes fadeUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
-.stat-pill {
-    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.11);
-    border-radius:50px; padding:5px 16px; font-size:0.78rem; color:rgba(255,255,255,0.6);
-    backdrop-filter:blur(8px);
-}
-.stat-pill b { color:#feca57; }
-
-/* Glass card */
-.glass {
-    background:rgba(255,255,255,0.055);
-    backdrop-filter:blur(20px) saturate(150%);
-    -webkit-backdrop-filter:blur(20px) saturate(150%);
-    border:1px solid rgba(255,255,255,0.11);
-    border-radius:22px; padding:26px 28px; margin-bottom:18px;
-    box-shadow:0 10px 40px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07);
-    animation:fadeUp 0.7s both;
-    transition:transform 0.3s ease, box-shadow 0.3s ease;
-}
-.glass:hover { transform:translateY(-3px); box-shadow:0 16px 50px rgba(0,0,0,0.45); }
-
-.sec-label {
-    font-size:0.7rem; font-weight:700; letter-spacing:1.8px; text-transform:uppercase;
-    color:rgba(255,255,255,0.3); margin-bottom:14px;
+.subtitle {
+    text-align: center;
+    color: rgba(255,255,255,0.6);
+    font-size: 1rem;
+    margin-bottom: 1.8rem;
+    animation: titleFade 1.4s ease-in;
 }
 
-/* Tooltip */
-.tip-wrap { display:inline-flex; align-items:center; gap:6px; margin-bottom:5px; }
-.tip-label { font-size:0.84rem; color:rgba(255,255,255,0.8); font-weight:500; }
-.tip-q {
-    display:inline-flex; align-items:center; justify-content:center;
-    width:17px; height:17px;
-    background:rgba(254,202,87,0.15); border:1px solid rgba(254,202,87,0.4);
-    border-radius:50%; font-size:10px; font-weight:700; color:#feca57;
-    cursor:help; position:relative; flex-shrink:0; transition:background 0.2s;
-}
-.tip-q:hover { background:rgba(254,202,87,0.32); }
-.tip-q .tip-box {
-    visibility:hidden; opacity:0;
-    position:absolute; bottom:130%; left:50%; transform:translateX(-50%);
-    background:rgba(6,6,18,0.97); border:1px solid rgba(254,202,87,0.28);
-    border-radius:12px; padding:10px 13px; width:205px;
-    font-size:0.75rem; color:rgba(255,255,255,0.85); line-height:1.6;
-    box-shadow:0 8px 30px rgba(0,0,0,0.6); z-index:9999;
-    transition:opacity 0.2s; pointer-events:none;
-}
-.tip-q:hover .tip-box { visibility:visible; opacity:1; }
-
-/* Widget overrides */
-label { color:rgba(255,255,255,0.72) !important; font-size:0.83rem !important; }
-.stSelectbox > div > div {
-    background:rgba(255,255,255,0.06) !important;
-    border:1px solid rgba(255,255,255,0.12) !important;
-    border-radius:12px !important; color:white !important;
-}
-.stNumberInput > div > div > input {
-    background:rgba(255,255,255,0.06) !important;
-    border:1px solid rgba(255,255,255,0.12) !important;
-    border-radius:12px !important; color:white !important;
-}
-div[data-testid="stNumberInput"] button { color:white !important; background:rgba(255,255,255,0.08) !important; }
-.stTextInput > div > div > input {
-    background:rgba(255,255,255,0.06) !important;
-    border:1px solid rgba(255,255,255,0.12) !important;
-    border-radius:12px !important; color:white !important;
-}
-.stTextArea > div > div > textarea {
-    background:rgba(255,255,255,0.06) !important;
-    border:1px solid rgba(255,255,255,0.12) !important;
-    border-radius:12px !important; color:rgba(255,255,255,0.85) !important;
-    font-size:0.87rem !important;
+/* ── Glass card ── */
+.glass-card {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 28px 32px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    animation: cardSlide 0.6s ease-out;
 }
 
-/* Buttons */
+@keyframes cardSlide {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.glass-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Section headings ── */
+.section-title {
+    color: #feca57;
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    border-left: 4px solid #ff6b6b;
+    padding-left: 12px;
+}
+
+/* ── Result cards ── */
+.result-danger {
+    background: linear-gradient(135deg, rgba(255,71,87,0.25), rgba(255,71,87,0.10));
+    border: 1px solid rgba(255,71,87,0.5);
+    border-radius: 18px;
+    padding: 28px;
+    text-align: center;
+    animation: pulse 2s ease-in-out infinite;
+    backdrop-filter: blur(10px);
+}
+
+.result-safe {
+    background: linear-gradient(135deg, rgba(72,219,251,0.25), rgba(72,219,251,0.10));
+    border: 1px solid rgba(72,219,251,0.5);
+    border-radius: 18px;
+    padding: 28px;
+    text-align: center;
+    animation: pulse 2s ease-in-out infinite;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,107,107,0.4); }
+    50%       { box-shadow: 0 0 0 14px rgba(255,107,107,0); }
+}
+
+.result-text {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+}
+
+.result-emoji { font-size: 3rem; display: block; margin-bottom: 10px; }
+
+/* ── Metric badges ── */
+.metric-badge {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 12px;
+    padding: 14px 20px;
+    text-align: center;
+    transition: transform 0.2s;
+}
+.metric-badge:hover { transform: scale(1.04); }
+.metric-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #48dbfb;
+}
+.metric-label {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.55);
+    margin-top: 2px;
+}
+
+/* ── Tooltip wrapper ── */
+.tooltip-wrap {
+    display: inline-block;
+    position: relative;
+    cursor: help;
+}
+.tooltip-wrap .tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background: rgba(254, 202, 87, 0.3);
+    border: 1px solid #feca57;
+    border-radius: 50%;
+    font-size: 11px;
+    color: #feca57;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: background 0.2s;
+}
+.tooltip-wrap:hover .tooltip-icon {
+    background: rgba(254, 202, 87, 0.6);
+}
+.tooltip-wrap .tooltip-text {
+    visibility: hidden;
+    opacity: 0;
+    background: rgba(15, 12, 41, 0.95);
+    border: 1px solid rgba(254, 202, 87, 0.4);
+    color: #fff;
+    font-size: 0.78rem;
+    border-radius: 10px;
+    padding: 10px 14px;
+    position: absolute;
+    z-index: 999;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 220px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    transition: opacity 0.25s;
+    line-height: 1.5;
+}
+.tooltip-wrap:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* ── Streamlit element tweaks ── */
+.stSelectbox > div > div,
+.stNumberInput > div > div > input,
+.stSlider { color: white !important; }
+
+div[data-testid="stSidebar"] {
+    background: rgba(15, 12, 41, 0.85) !important;
+    backdrop-filter: blur(20px);
+    border-right: 1px solid rgba(255,255,255,0.1);
+    display: block !important;
+    visibility: visible !important;
+}
+
+div[data-testid="stSidebar"] * { color: rgba(255,255,255,0.85) !important; }
+
+/* Keep sidebar collapse/expand button visible */
+button[data-testid="collapsedControl"],
+div[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: white !important;
+}
+
+/* Ensure sidebar nav elements are visible */
+section[data-testid="stSidebar"] {
+    display: block !important;
+    visibility: visible !important;
+}
+
 .stButton > button {
-    background:linear-gradient(135deg,#6c5ce7,#a29bfe) !important;
-    color:white !important; border:none !important;
-    border-radius:50px !important; padding:11px 32px !important;
-    font-weight:600 !important; font-size:0.92rem !important;
-    width:100% !important; letter-spacing:0.2px !important;
-    transition:all 0.3s ease !important;
-    box-shadow:0 4px 20px rgba(108,92,231,0.38) !important;
+    background: linear-gradient(90deg, #ff6b6b, #ff9ff3) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 30px !important;
+    padding: 12px 40px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 20px rgba(255,107,107,0.4) !important;
+    width: 100% !important;
 }
 .stButton > button:hover {
-    transform:translateY(-2px) !important;
-    box-shadow:0 8px 30px rgba(108,92,231,0.58) !important;
-}
-.predict-btn .stButton > button {
-    background:linear-gradient(135deg,#ff6b6b,#ee5a24) !important;
-    box-shadow:0 4px 22px rgba(255,107,107,0.42) !important;
-    font-size:1rem !important; padding:13px 40px !important;
-}
-.predict-btn .stButton > button:hover {
-    box-shadow:0 10px 34px rgba(255,107,107,0.62) !important;
-    background:linear-gradient(135deg,#ff7675,#fd79a8) !important;
-}
-.ai-btn .stButton > button {
-    background:linear-gradient(135deg,#00b894,#00cec9) !important;
-    box-shadow:0 4px 20px rgba(0,184,148,0.38) !important;
-}
-.ai-btn .stButton > button:hover {
-    box-shadow:0 8px 30px rgba(0,184,148,0.58) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 30px rgba(255,107,107,0.6) !important;
 }
 
-/* Result cards */
-.result-danger {
-    background:linear-gradient(135deg,rgba(255,71,87,0.18),rgba(214,48,49,0.10));
-    border:1px solid rgba(255,71,87,0.38); border-radius:20px; padding:30px 26px; text-align:center;
-    box-shadow:0 0 50px rgba(255,71,87,0.1), inset 0 1px 0 rgba(255,150,150,0.1);
-    animation:resultIn 0.6s both, dangerGlow 3s 0.6s ease-in-out infinite;
-    backdrop-filter:blur(12px);
+label, .stSlider label { color: rgba(255,255,255,0.85) !important; }
+
+/* Progress / spinner color */
+.stProgress > div > div { background: linear-gradient(90deg, #ff6b6b, #feca57) !important; }
+
+/* hide streamlit branding but keep sidebar toggle */
+#MainMenu { visibility: hidden; }
+footer { visibility: hidden; }
+header { visibility: hidden; }
+/* Restore the sidebar collapse button that lives inside the header */
+header button[data-testid="collapsedControl"] { visibility: visible !important; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+::-webkit-scrollbar-thumb { background: #ff6b6b; border-radius: 3px; }
+
+/* info / warning override */
+.stAlert {
+    background: rgba(255,255,255,0.07) !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    color: white !important;
 }
-.result-safe {
-    background:linear-gradient(135deg,rgba(0,210,150,0.18),rgba(0,184,212,0.10));
-    border:1px solid rgba(0,210,150,0.38); border-radius:20px; padding:30px 26px; text-align:center;
-    box-shadow:0 0 50px rgba(0,210,150,0.1), inset 0 1px 0 rgba(100,255,200,0.1);
-    animation:resultIn 0.6s both, safeGlow 3s 0.6s ease-in-out infinite;
-    backdrop-filter:blur(12px);
+
+h1, h2, h3 { color: white !important; }
+p, li { color: rgba(255,255,255,0.8) !important; }
+
+.divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    margin: 1.5rem 0;
 }
-@keyframes resultIn { from{opacity:0;transform:scale(0.88) translateY(20px)} to{opacity:1;transform:scale(1) translateY(0)} }
-@keyframes dangerGlow { 0%,100%{box-shadow:0 0 50px rgba(255,71,87,0.1)} 50%{box-shadow:0 0 70px rgba(255,71,87,0.22)} }
-@keyframes safeGlow   { 0%,100%{box-shadow:0 0 50px rgba(0,210,150,0.1)} 50%{box-shadow:0 0 70px rgba(0,210,150,0.22)} }
-.result-emoji { font-size:3.2rem; display:block; margin-bottom:12px; }
-.result-title { font-size:1.65rem; font-weight:800; color:white; margin:0 0 8px; }
-.result-sub   { font-size:0.9rem; color:rgba(255,255,255,0.62); margin:0; }
 
-/* Prob bars */
-.prob-row { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
-.prob-label { font-size:0.8rem; color:rgba(255,255,255,0.58); width:100px; flex-shrink:0; }
-.prob-bar-bg { flex:1; height:7px; background:rgba(255,255,255,0.08); border-radius:99px; overflow:hidden; }
-.prob-bar-fill { height:100%; border-radius:99px; }
-.prob-pct { font-size:0.8rem; font-weight:700; width:40px; text-align:right; }
-
-/* Metric chips */
-.chip-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; }
-.chip {
-    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);
-    border-radius:12px; padding:10px 16px; text-align:center; flex:1; min-width:80px;
+/* step badges */
+.step-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #ff6b6b, #ff9ff3);
+    color: white;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    text-align: center;
+    line-height: 28px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-right: 10px;
 }
-.chip-val { font-size:1.25rem; font-weight:700; color:#a29bfe; }
-.chip-lbl { font-size:0.68rem; color:rgba(255,255,255,0.38); margin-top:2px; }
-
-/* AI panel */
-.ai-header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
-.ai-title  { font-size:0.95rem; font-weight:700; color:#00d2ff; }
-.ai-desc   { font-size:0.82rem; color:rgba(255,255,255,0.45); margin-bottom:14px; line-height:1.6; }
-
-/* About */
-.about-name {
-    display:inline-block; background:rgba(162,155,254,0.14); border:1px solid rgba(162,155,254,0.25);
-    border-radius:8px; padding:2px 12px; font-size:0.8rem; color:#a29bfe; margin:3px 4px;
-}
-.div-line { height:1px; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.09),transparent); margin:18px 0; }
-
-::-webkit-scrollbar { width:5px; }
-::-webkit-scrollbar-track { background:rgba(255,255,255,0.03); }
-::-webkit-scrollbar-thumb { background:rgba(162,155,254,0.35); border-radius:3px; }
-
-.stAlert { background:rgba(255,255,255,0.05) !important; border-radius:14px !important; border:1px solid rgba(255,255,255,0.1) !important; }
-h3 { color:rgba(255,255,255,0.9) !important; }
-p, li { color:rgba(255,255,255,0.7) !important; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# ── Tooltip helper ────────────────────────────────────────────────────────────
-def tip(label, hint):
-    return (f"<div class='tip-wrap'>"
-            f"<span class='tip-label'>{label}</span>"
-            f"<span class='tip-q'>?<span class='tip-box'>{hint}</span></span>"
-            f"</div>")
+# ─── Helper: tooltip HTML ────────────────────────────────────────────────────
+def tip(label: str, hint: str) -> str:
+    return f"""
+    <div class='tooltip-wrap'>
+        <span style='color:rgba(255,255,255,0.85);font-size:0.9rem;'>{label}</span>
+        <span class='tooltip-icon'>?</span>
+        <span class='tooltip-text'>{hint}</span>
+    </div>
+    """
 
 
-# ── Load & prepare ────────────────────────────────────────────────────────────
+# ─── Load & Prepare Data ─────────────────────────────────────────────────────
 @st.cache_data
-def load_data():
+def load_and_prepare_data():
     try:
         df = pd.read_csv("heart.csv")
     except FileNotFoundError:
-        st.error("❌  heart.csv not found — make sure it's in the same folder as app.py")
+        st.error("❌ heart.csv not found! Make sure the file is in the same folder as app.py")
         st.stop()
+
     df_enc = df.copy()
-    for col in ['Sex','ChestPainType','RestingECG','ExerciseAngina','ST_Slope']:
-        df_enc[col] = LabelEncoder().fit_transform(df_enc[col])
+
+    cat_cols = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
+    encoders = {}
+    for col in cat_cols:
+        le = LabelEncoder()          # fresh encoder per column — fixes reference bug
+        df_enc[col] = le.fit_transform(df_enc[col])
+        encoders[col] = le
+
     X = df_enc.drop("HeartDisease", axis=1)
     y = df_enc["HeartDisease"]
+
+    return X, y, encoders, df
+
+
+# ─── Train Model ────────────────────────────────────────────────────────────
+@st.cache_data   # cache_data is correct for serialisable return values
+def train_model(model_name: str, do_tuning: bool):
+    X, y, encoders, _ = load_and_prepare_data()
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    # Fit scaler on training data only — prevents data leakage
     scaler = StandardScaler()
-    X_s = pd.DataFrame(scaler.fit_transform(X), columns=X.columns)
-    return X_s, y, scaler
+    X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
+    X_test_scaled  = pd.DataFrame(scaler.transform(X_test),      columns=X_test.columns)
 
-
-# ── Auto-pick best model ──────────────────────────────────────────────────────
-@st.cache_resource
-def get_best_model():
-    X, y, scaler = load_data()
-    Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-    candidates = {
-        "Random Forest":       RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42),
-        "Gradient Boosting":   GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, max_depth=4, random_state=42),
-        "Logistic Regression": LogisticRegression(C=1, max_iter=1000, random_state=42),
-        "SVM":                 SVC(C=10, kernel="rbf", probability=True, random_state=42),
-        "KNN (k=15)":          KNeighborsClassifier(n_neighbors=15),
+    models_config = {
+        "Random Forest": {
+            "model": RandomForestClassifier(random_state=42),
+            "params": {
+                "n_estimators": [50, 100, 200],
+                "max_depth": [None, 10, 20],
+                "min_samples_split": [2, 5]
+            }
+        },
+        "Gradient Boosting": {
+            "model": GradientBoostingClassifier(random_state=42),
+            "params": {
+                "n_estimators": [50, 100],
+                "learning_rate": [0.05, 0.1, 0.2],
+                "max_depth": [3, 5]
+            }
+        },
+        "Logistic Regression": {
+            "model": LogisticRegression(random_state=42, max_iter=1000),
+            "params": {
+                "C": [0.01, 0.1, 1, 10],
+                "solver": ["lbfgs", "liblinear"]
+            }
+        },
+        "SVM": {
+            "model": SVC(probability=True, random_state=42),
+            "params": {
+                "C": [0.1, 1, 10],
+                "kernel": ["rbf", "linear"],
+                "gamma": ["scale", "auto"]
+            }
+        },
+        "KNN": {
+            "model": KNeighborsClassifier(),
+            "params": {
+                "n_neighbors": [3, 5, 7, 9],
+                "weights": ["uniform", "distance"],
+                "metric": ["minkowski", "euclidean", "manhattan"]
+            }
+        }
     }
-    best_name, best_cv, best_m = "", 0, None
-    for name, m in candidates.items():
-        cv = cross_val_score(m, X, y, cv=5, scoring="accuracy").mean()
-        if cv > best_cv:
-            best_cv, best_name, best_m = cv, name, m
-    best_m.fit(Xtr, ytr)
-    tacc = accuracy_score(yte, best_m.predict(Xte))
-    cvs  = cross_val_score(best_m, X, y, cv=5, scoring="accuracy")
-    rep  = classification_report(yte, best_m.predict(Xte), output_dict=True)
-    return best_m, scaler, best_name, tacc, cvs.mean(), rep
+
+    cfg = models_config[model_name]
+
+    if do_tuning:
+        grid = GridSearchCV(
+            cfg["model"], cfg["params"],
+            cv=5, scoring="accuracy", n_jobs=-1
+        )
+        grid.fit(X_train_scaled, y_train)
+        best_model = grid.best_estimator_
+        best_params = grid.best_params_
+    else:
+        best_model = cfg["model"]
+        best_model.fit(X_train_scaled, y_train)
+        best_params = {}
+
+    y_pred  = best_model.predict(X_test_scaled)
+    y_prob  = best_model.predict_proba(X_test_scaled)[:, 1]
+    acc     = accuracy_score(y_test, y_pred)
+    auc     = roc_auc_score(y_test, y_prob)
+
+    # CV on the full (unscaled) feature set — note: if tuning was on,
+    # these scores are optimistically biased because the best_model was
+    # already selected on the same data.
+    X_full_scaled = pd.DataFrame(
+        StandardScaler().fit_transform(X), columns=X.columns
+    )
+    cv_scores = cross_val_score(best_model, X_full_scaled, y, cv=5, scoring="accuracy")
+    cv_biased = do_tuning   # flag exposed to UI
+
+    report = classification_report(y_test, y_pred, output_dict=True)
+    cm     = confusion_matrix(y_test, y_pred)
+
+    return best_model, scaler, encoders, acc, auc, cv_scores, cv_biased, best_params, report, cm, X_train_scaled.shape[0]
 
 
-# ── Encode user row ───────────────────────────────────────────────────────────
-def encode_row(row, scaler):
-    sex_m = {"Male":"M","Female":"F"}
-    cp_m  = {"Asymptomatic":"ASY","Typical Angina":"TA","Atypical Angina":"ATA","Non-Anginal Pain":"NAP"}
-    ecg_m = {"Normal":"Normal","ST-T Abnormality":"ST","Left Ventricular Hypertrophy":"LVH"}
-    ea_m  = {"Yes":"Y","No":"N"}
-    sl_m  = {"Upsloping":"Up","Flat":"Flat","Downsloping":"Down"}
+# ─── Encode Single Input ────────────────────────────────────────────────────
+def encode_input(row: dict, scaler, encoders):
+    mapping_sex           = {"Male": "M",   "Female": "F"}
+    mapping_chest         = {
+        "Typical Angina (TA)": "TA",
+        "Atypical Angina (ATA)": "ATA",
+        "Non-Anginal Pain (NAP)": "NAP",
+        "Asymptomatic (ASY)": "ASY"
+    }
+    mapping_ecg           = {"Normal": "Normal", "ST-T Abnormality (ST)": "ST", "Left Ventricular Hypertrophy (LVH)": "LVH"}
+    mapping_angina        = {"Yes": "Y", "No": "N"}
+    mapping_slope         = {"Upsloping (Up)": "Up", "Flat": "Flat", "Downsloping (Down)": "Down"}
 
-    le_sex = LabelEncoder(); le_sex.fit(["F","M"])
-    le_cp  = LabelEncoder(); le_cp.fit(["ASY","ATA","NAP","TA"])
-    le_ecg = LabelEncoder(); le_ecg.fit(["LVH","Normal","ST"])
-    le_ea  = LabelEncoder(); le_ea.fit(["N","Y"])
-    le_sl  = LabelEncoder(); le_sl.fit(["Down","Flat","Up"])
+    raw = {
+        "Age":            row["Age"],
+        "Sex":            mapping_sex[row["Sex"]],
+        "ChestPainType":  mapping_chest[row["ChestPainType"]],
+        "RestingBP":      row["RestingBP"],
+        "Cholesterol":    row["Cholesterol"],
+        "FastingBS":      1 if row["FastingBS"] == "Yes (> 120 mg/dl)" else 0,
+        "RestingECG":     mapping_ecg[row["RestingECG"]],
+        "MaxHR":          row["MaxHR"],
+        "ExerciseAngina": mapping_angina[row["ExerciseAngina"]],
+        "Oldpeak":        row["Oldpeak"],
+        "ST_Slope":       mapping_slope[row["ST_Slope"]],
+    }
 
-    vals = [
-        row["Age"],
-        le_sex.transform([sex_m[row["Sex"]]])[0],
-        le_cp.transform([cp_m[row["ChestPainType"]]])[0],
-        row["RestingBP"], row["Cholesterol"],
-        1 if row["FastingBS"] == "Yes" else 0,
-        le_ecg.transform([ecg_m[row["RestingECG"]]])[0],
-        row["MaxHR"],
-        le_ea.transform([ea_m[row["ExerciseAngina"]]])[0],
-        row["Oldpeak"],
-        le_sl.transform([sl_m[row["ST_Slope"]]])[0],
+    encoded = [
+        raw["Age"],
+        encoders["Sex"].transform([raw["Sex"]])[0],
+        encoders["ChestPainType"].transform([raw["ChestPainType"]])[0],
+        raw["RestingBP"],
+        raw["Cholesterol"],
+        raw["FastingBS"],
+        encoders["RestingECG"].transform([raw["RestingECG"]])[0],
+        raw["MaxHR"],
+        encoders["ExerciseAngina"].transform([raw["ExerciseAngina"]])[0],
+        raw["Oldpeak"],
+        encoders["ST_Slope"].transform([raw["ST_Slope"]])[0],
     ]
+
+    arr = np.array(encoded).reshape(1, -1)
     cols = ["Age","Sex","ChestPainType","RestingBP","Cholesterol",
             "FastingBS","RestingECG","MaxHR","ExerciseAngina","Oldpeak","ST_Slope"]
-    return scaler.transform(pd.DataFrame([vals], columns=cols))
+    df_input = pd.DataFrame(arr, columns=cols)
+    df_scaled = scaler.transform(df_input)
+    return df_scaled
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  BOOT — train silently
+#  HEADER
 # ════════════════════════════════════════════════════════════════════════════
-with st.spinner("Starting up..."):
-    try:
-        model, scaler, model_name, test_acc, cv_mean, report = get_best_model()
-        prec = report["weighted avg"]["precision"]
-        model_ready = True
-    except Exception as e:
-        st.error(f"Startup error: {e}")
-        model_ready = False
-
+st.markdown('<h1 class="main-title">🫀 Heart Disease Prediction System</h1>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Tell us a little about yourself and we\'ll do the rest — powered by Machine Learning</p>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════
-#  HERO
+#  SIDEBAR — Model Settings
 # ════════════════════════════════════════════════════════════════════════════
-st.markdown("""
-<div class='hero-wrap'>
-  <span class='hero-icon'>🫀</span>
-  <h1 class='hero-title'>Heart Disease Prediction System</h1>
-  <p class='hero-sub'>Fill in your details below — the model will analyse your risk instantly</p>
-</div>
-""", unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown("## ⚙️ Model Settings")
+    st.markdown("---")
 
-if model_ready:
-    st.markdown(f"""
-    <div class='stat-row'>
-      <div class='stat-pill'>🧠 Auto-selected: <b>{model_name}</b></div>
-      <div class='stat-pill'>🎯 Accuracy: <b>{test_acc*100:.1f}%</b></div>
-      <div class='stat-pill'>📊 CV Score: <b>{cv_mean*100:.1f}%</b></div>
-      <div class='stat-pill'>👥 Trained on <b>918 patients</b></div>
-      <div class='stat-pill'>🔬 Precision: <b>{prec:.2f}</b></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  AI ASSISTANT
-# ════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="glass">', unsafe_allow_html=True)
-st.markdown("""
-<div class='ai-header'>
-  <span style='font-size:1.3rem;'>🤖</span>
-  <span class='ai-title'>AI Assistant — Auto-fill from your description</span>
-</div>
-<div class='ai-desc'>
-  Don't want to fill everything manually? Just describe your health situation in plain words
-  and the AI will read it and fill the form for you automatically.
-</div>
-""", unsafe_allow_html=True)
-
-d_col, k_col = st.columns([3, 2])
-with d_col:
-    user_desc = st.text_area(
-        "desc", height=85, label_visibility="collapsed",
-        placeholder='e.g. "52 year old male, BP around 138, cholesterol 260, gets chest pain on exercise, max HR was 120..."'
-    )
-with k_col:
-    api_key = st.text_input(
-        "Anthropic API Key", type="password",
-        placeholder="sk-ant-api03-...",
-        help="Get a free key at console.anthropic.com"
+    model_choice = st.selectbox(
+        "Choose a Machine Learning Model",
+        ["Random Forest", "Gradient Boosting", "Logistic Regression", "SVM", "KNN"],
+        help="Each model learns patterns differently. Random Forest is usually the most reliable to start with!"
     )
 
-a1, a2, _ = st.columns([1.2, 1.2, 2.6])
-with a1:
-    st.markdown('<div class="ai-btn">', unsafe_allow_html=True)
-    ai_clicked = st.button("✨ Fill with AI", key="ai_btn")
+    do_tuning = st.toggle(
+        "🔧 Enable Hyperparameter Tuning",
+        value=False,
+        help="This tries many different settings to find the best ones. Takes a bit longer but worth it!"
+    )
+
+    if do_tuning:
+        st.info("⏳ Tuning is ON — training might take 30–60 seconds. Grab a coffee! ☕")
+
+    st.markdown("---")
+    st.markdown("### 📌 What is this app?")
+    st.markdown("""
+This tool uses real patient data to predict whether someone might have heart disease.
+Just fill in your health details on the right and hit **Predict**!
+
+> ⚠️ *This is a student project for educational purposes — not a medical diagnosis.*
+    """)
+
+    st.markdown("---")
+    st.markdown("### 🧠 Models Available")
+    st.markdown("""
+- 🌲 **Random Forest** — votes from many trees
+- 📈 **Gradient Boosting** — learns from mistakes step-by-step  
+- 📊 **Logistic Regression** — simple, fast, reliable  
+- 🔵 **SVM** — draws a boundary between healthy & at-risk  
+- 👣 **KNN** — predicts using similar past examples
+    """)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  TRAIN MODEL SECTION
+# ════════════════════════════════════════════════════════════════════════════
+col_btn, col_status = st.columns([1, 3])
+
+with col_btn:
+    train_clicked = st.button("🚀 Train Model")
+
+if "model_ready" not in st.session_state:
+    st.session_state.model_ready = False
+
+if train_clicked:
+    with st.spinner(f"Training {model_choice}... hold tight! 🧠"):
+        try:
+            (model, scaler, encoders, acc, auc, cv_scores,
+             cv_biased, best_params, report, cm, n_train) = train_model(model_choice, do_tuning)
+
+            st.session_state.model       = model
+            st.session_state.scaler      = scaler
+            st.session_state.encoders    = encoders
+            st.session_state.acc         = acc
+            st.session_state.auc         = auc
+            st.session_state.cv_scores   = cv_scores
+            st.session_state.cv_biased   = cv_biased
+            st.session_state.best_params = best_params
+            st.session_state.report      = report
+            st.session_state.cm          = cm
+            st.session_state.n_train     = n_train
+            st.session_state.model_name  = model_choice
+            st.session_state.model_ready = True
+            st.success("✅ Model trained successfully!")
+        except Exception as e:
+            st.error(f"❌ Something went wrong while training: {e}")
+
+# ─── Model Performance Cards ─────────────────────────────────────────────────
+if st.session_state.model_ready:
+    st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown(f'<p class="section-title">📊 {st.session_state.model_name} — Performance Report</p>', unsafe_allow_html=True)
+
+    cv_mean  = st.session_state.cv_scores.mean()
+    cv_std   = st.session_state.cv_scores.std()
+    precision = st.session_state.report["weighted avg"]["precision"]
+    recall    = st.session_state.report["weighted avg"]["recall"]
+    f1        = st.session_state.report["weighted avg"]["f1-score"]
+
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    with c1:
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value'>{st.session_state.acc*100:.1f}%</div>
+            <div class='metric-label'>Test Accuracy</div>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        cv_label = "CV Accuracy*" if st.session_state.cv_biased else f"CV Accuracy (±{cv_std*100:.1f}%)"
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value'>{cv_mean*100:.1f}%</div>
+            <div class='metric-label'>{cv_label}</div>
+        </div>""", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value'>{precision:.2f}</div>
+            <div class='metric-label'>Precision</div>
+        </div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value'>{recall:.2f}</div>
+            <div class='metric-label'>Recall</div>
+        </div>""", unsafe_allow_html=True)
+    with c5:
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value'>{f1:.2f}</div>
+            <div class='metric-label'>F1 Score</div>
+        </div>""", unsafe_allow_html=True)
+    with c6:
+        st.markdown(f"""
+        <div class='metric-badge'>
+            <div class='metric-value' style='color:#ff9ff3;'>{st.session_state.auc:.3f}</div>
+            <div class='metric-label'>AUC-ROC</div>
+        </div>""", unsafe_allow_html=True)
+
+    if st.session_state.cv_biased:
+        st.caption("⚠️ *CV scores may be optimistically biased — the tuned model was selected using the same dataset.")
+
+    if st.session_state.best_params:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**🔧 Best Hyperparameters Found:**")
+        params_str = "  |  ".join([f"`{k}` = **{v}**" for k, v in st.session_state.best_params.items()])
+        st.markdown(params_str)
+
+    # ── Confusion Matrix ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("**🔢 Confusion Matrix**")
+    cm_df = pd.DataFrame(
+        st.session_state.cm,
+        index=["Actual: No Disease", "Actual: Disease"],
+        columns=["Predicted: No Disease", "Predicted: Disease"]
+    )
+    st.dataframe(cm_df, use_container_width=True)
+
+    # KNN note — single occurrence
+    if st.session_state.model_name == "KNN":
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("**👣 KNN Note:** KNN makes predictions by comparing you to the most similar patients in the dataset, using nearby neighbors to decide the likely outcome.")
+
     st.markdown('</div>', unsafe_allow_html=True)
-with a2:
-    if st.button("🔄 Clear", key="clear_btn"):
-        for k in ["ai_age","ai_sex","ai_cp","ai_rbp","ai_chol",
-                  "ai_fbs","ai_ecg","ai_hr","ai_ea","ai_op","ai_sl"]:
-            st.session_state.pop(k, None)
-        st.rerun()
-
-if ai_clicked:
-    if not user_desc.strip():
-        st.warning("Please type your health description first.")
-    elif not api_key.strip():
-        st.warning("Enter your Anthropic API key to use AI fill.")
-    else:
-        with st.spinner("AI is reading your description..."):
-            try:
-                import urllib.request
-                payload = json.dumps({
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 500,
-                    "system": (
-                        "You are a medical data extractor. Extract values from the user's description and return "
-                        "ONLY a valid JSON object with these exact keys: "
-                        "Age (int 18-100), Sex (Male or Female), "
-                        "ChestPainType (Asymptomatic / Typical Angina / Atypical Angina / Non-Anginal Pain), "
-                        "RestingBP (int 80-220), Cholesterol (int 0-650), FastingBS (Yes or No), "
-                        "RestingECG (Normal / ST-T Abnormality / Left Ventricular Hypertrophy), "
-                        "MaxHR (int 50-220), ExerciseAngina (Yes or No), Oldpeak (float -3 to 7), "
-                        "ST_Slope (Upsloping / Flat / Downsloping). "
-                        "Use healthy baseline values for anything not mentioned. Return ONLY JSON, no other text."
-                    ),
-                    "messages": [{"role":"user","content": user_desc}]
-                }).encode()
-                req = urllib.request.Request(
-                    "https://api.anthropic.com/v1/messages", data=payload,
-                    headers={"Content-Type":"application/json",
-                             "x-api-key": api_key.strip(),
-                             "anthropic-version":"2023-06-01"}
-                )
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    data = json.loads(resp.read().decode())
-                raw = data["content"][0]["text"].strip()
-                if raw.startswith("```"):
-                    raw = raw.split("```")[1]
-                    if raw.startswith("json"): raw = raw[4:]
-                parsed = json.loads(raw.strip())
-
-                st.session_state["ai_age"]  = int(parsed.get("Age", 45))
-                st.session_state["ai_sex"]  = parsed.get("Sex", "Male")
-                st.session_state["ai_cp"]   = parsed.get("ChestPainType", "Asymptomatic")
-                st.session_state["ai_rbp"]  = int(parsed.get("RestingBP", 120))
-                st.session_state["ai_chol"] = int(parsed.get("Cholesterol", 200))
-                st.session_state["ai_fbs"]  = parsed.get("FastingBS", "No")
-                st.session_state["ai_ecg"]  = parsed.get("RestingECG", "Normal")
-                st.session_state["ai_hr"]   = int(parsed.get("MaxHR", 150))
-                st.session_state["ai_ea"]   = parsed.get("ExerciseAngina", "No")
-                st.session_state["ai_op"]   = float(parsed.get("Oldpeak", 0.0))
-                st.session_state["ai_sl"]   = parsed.get("ST_Slope", "Upsloping")
-                st.success("✅ Form filled! Review below and hit Predict.")
-                st.rerun()
-            except urllib.error.HTTPError as e:
-                body = e.read().decode()
-                if e.code == 401: st.error("❌ Invalid API key. Check console.anthropic.com")
-                else: st.error(f"❌ API error {e.code}: {body[:200]}")
-            except Exception as e:
-                st.error(f"❌ Something went wrong: {e}")
-
-st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  INPUT FORM
+#  PREDICTION FORM
 # ════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="glass">', unsafe_allow_html=True)
-st.markdown("<div class='sec-label'>Patient Health Details</div>", unsafe_allow_html=True)
-st.markdown(
-    "Hover over the <b style='color:#feca57;font-size:0.82rem;'>?</b> next to any field if you're unsure what to enter.",
-    unsafe_allow_html=True
-)
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+st.markdown('<p class="section-title">🩺 Enter Your Health Details</p>', unsafe_allow_html=True)
+st.markdown("Fill in the details below as accurately as you can. Not sure about something? Hover over the **?** icon next to each field for a quick guide.")
 st.markdown("<br>", unsafe_allow_html=True)
 
-r1c1, r1c2, r1c3 = st.columns(3)
-with r1c1:
-    st.markdown(tip("Age", "Your current age in years.<br><b>Dataset range:</b> 28 – 77."), unsafe_allow_html=True)
-    age = st.number_input("_age", min_value=18, max_value=100,
-                          value=st.session_state.get("ai_age", 45),
-                          label_visibility="collapsed", key="f_age")
-with r1c2:
-    st.markdown(tip("Sex", "Biological sex at birth.<br><b>Options:</b> Male · Female"), unsafe_allow_html=True)
-    sex_opts = ["Male","Female"]
-    sex = st.selectbox("_sex", sex_opts,
-                       index=sex_opts.index(st.session_state.get("ai_sex","Male")),
-                       label_visibility="collapsed", key="f_sex")
-with r1c3:
-    st.markdown(tip("Chest Pain Type",
-                    "<b>Asymptomatic</b> — no chest pain (most common in heart disease).<br>"
-                    "<b>Typical Angina</b> — classic pressure during activity.<br>"
-                    "<b>Atypical Angina</b> — unusual pattern discomfort.<br>"
-                    "<b>Non-Anginal</b> — mild, not heart-related."), unsafe_allow_html=True)
-    cp_opts = ["Asymptomatic","Typical Angina","Atypical Angina","Non-Anginal Pain"]
-    cp = st.selectbox("_cp", cp_opts,
-                      index=cp_opts.index(st.session_state.get("ai_cp","Asymptomatic")),
-                      label_visibility="collapsed", key="f_cp")
+# Row 1
+col1, col2, col3 = st.columns(3)
 
-r2c1, r2c2, r2c3 = st.columns(3)
-with r2c1:
-    st.markdown(tip("Resting Blood Pressure",
-                    "Your BP at rest (mmHg).<br><b>Normal:</b> ~120 &nbsp;·&nbsp; <b>High:</b> 140+"), unsafe_allow_html=True)
-    rbp = st.number_input("_rbp", min_value=80, max_value=220,
-                           value=st.session_state.get("ai_rbp", 120),
-                           label_visibility="collapsed", key="f_rbp")
-with r2c2:
-    st.markdown(tip("Cholesterol (mg/dL)",
-                    "Total blood cholesterol.<br><b>Good:</b> &lt;200 &nbsp;·&nbsp; <b>Borderline:</b> 200–239<br><b>High:</b> 240+"), unsafe_allow_html=True)
-    chol = st.number_input("_chol", min_value=0, max_value=650,
-                            value=st.session_state.get("ai_chol", 200),
-                            label_visibility="collapsed", key="f_chol")
-with r2c3:
-    st.markdown(tip("Fasting Blood Sugar",
-                    "Blood sugar after 8 hrs of fasting.<br><b>Yes</b> = above 120 mg/dL (diabetes risk).<br><b>No</b> = 120 or below."), unsafe_allow_html=True)
-    fbs_opts = ["No","Yes"]
-    fbs = st.selectbox("_fbs", fbs_opts,
-                       index=fbs_opts.index(st.session_state.get("ai_fbs","No")),
-                       label_visibility="collapsed", key="f_fbs")
+with col1:
+    st.markdown(tip("Age", "Your current age in years"), unsafe_allow_html=True)
+    age = st.number_input("", min_value=18, max_value=100, value=45, key="age", label_visibility="collapsed")
 
-r3c1, r3c2, r3c3 = st.columns(3)
-with r3c1:
-    st.markdown(tip("Resting ECG",
-                    "<b>Normal</b> — heart rhythm looks fine.<br>"
-                    "<b>ST-T Abnormality</b> — minor ECG irregularity.<br>"
-                    "<b>LVH</b> — left ventricle appears enlarged."), unsafe_allow_html=True)
-    ecg_opts = ["Normal","ST-T Abnormality","Left Ventricular Hypertrophy"]
-    ecg = st.selectbox("_ecg", ecg_opts,
-                       index=ecg_opts.index(st.session_state.get("ai_ecg","Normal")),
-                       label_visibility="collapsed", key="f_ecg")
-with r3c2:
-    st.markdown(tip("Max Heart Rate",
-                    "Highest HR during exercise test (bpm).<br><b>Lower than expected</b> for your age can be a warning sign.<br>Typical: 60 – 202 bpm"), unsafe_allow_html=True)
-    mhr = st.number_input("_mhr", min_value=50, max_value=220,
-                           value=st.session_state.get("ai_hr", 150),
-                           label_visibility="collapsed", key="f_mhr")
-with r3c3:
-    st.markdown(tip("Exercise-Induced Angina",
-                    "Did you get chest pain during physical activity?<br><b>Yes</b> — pain during exercise.<br><b>No</b> — no discomfort."), unsafe_allow_html=True)
-    ea_opts = ["No","Yes"]
-    ea = st.selectbox("_ea", ea_opts,
-                      index=ea_opts.index(st.session_state.get("ai_ea","No")),
-                      label_visibility="collapsed", key="f_ea")
+with col2:
+    st.markdown(tip("Biological Sex", "Select the sex assigned at birth — Male or Female."), unsafe_allow_html=True)
+    sex = st.selectbox("", ["Male", "Female"], key="sex", label_visibility="collapsed")
 
-r4c1, r4c2 = st.columns(2)
-with r4c1:
-    st.markdown(tip("Oldpeak — ST Depression",
-                    "ECG change during exercise vs rest.<br><b>0</b> = healthy &nbsp;·&nbsp; <b>1–2</b> = mild<br><b>3+</b> = worth checking out."), unsafe_allow_html=True)
-    op = st.slider("_op", min_value=-3.0, max_value=7.0,
-                   value=float(st.session_state.get("ai_op", 1.0)),
-                   step=0.1, label_visibility="collapsed", key="f_op")
-with r4c2:
-    st.markdown(tip("ST Slope",
-                    "<b>Upsloping</b> — healthy response ✅<br><b>Flat</b> — neutral, monitor.<br><b>Downsloping</b> — may indicate reduced blood flow ⚠️"), unsafe_allow_html=True)
-    sl_opts = ["Upsloping","Flat","Downsloping"]
-    sl = st.selectbox("_sl", sl_opts,
-                      index=sl_opts.index(st.session_state.get("ai_sl","Upsloping")),
-                      label_visibility="collapsed", key="f_sl")
+with col3:
+    st.markdown(tip("Chest Pain Type", "TA = Typical chest pain during activity.<br>ATA = Chest pain that doesn't quite fit the usual pattern.<br>NAP = Mild, non-heart-related discomfort.<br>ASY = No chest pain at all (most common in heart disease!)."), unsafe_allow_html=True)
+    chest_pain = st.selectbox("", [
+        "Typical Angina (TA)", "Atypical Angina (ATA)",
+        "Non-Anginal Pain (NAP)", "Asymptomatic (ASY)"
+    ], key="cp", label_visibility="collapsed")
+
+# Row 2
+col4, col5, col6 = st.columns(3)
+
+with col4:
+    st.markdown(tip("Resting Blood Pressure (mmHg)", "Your blood pressure when at rest.<br>Normal: around 120.<br>High (hypertension): 140+."), unsafe_allow_html=True)
+    resting_bp = st.number_input("", min_value=80, max_value=220, value=120, key="rbp", label_visibility="collapsed")
+
+with col5:
+    st.markdown(tip("Cholesterol (mg/dL)", "Total cholesterol level from a blood test.<br>Normal: below 200.<br>Borderline high: 200 – 239.<br>High: 240+."), unsafe_allow_html=True)
+    cholesterol = st.number_input("", min_value=0, max_value=650, value=200, key="chol", label_visibility="collapsed")
+
+with col6:
+    st.markdown(tip("Fasting Blood Sugar", "Your blood sugar level after fasting (not eating for 8 hours).<br>Yes = Sugar above 120 mg/dL (possible diabetes risk).<br>No = Normal levels."), unsafe_allow_html=True)
+    fasting_bs = st.selectbox("", ["No (≤ 120 mg/dl)", "Yes (> 120 mg/dl)"], key="fbs", label_visibility="collapsed")
+
+# Row 3
+col7, col8, col9 = st.columns(3)
+
+with col7:
+    st.markdown(tip("Resting ECG", "Result of your heart's electrical activity at rest.<br>Normal = All good.<br>ST = Minor abnormality in heartbeat pattern.<br>LVH = Left side of heart looks enlarged."), unsafe_allow_html=True)
+    resting_ecg = st.selectbox("", [
+        "Normal", "ST-T Abnormality (ST)", "Left Ventricular Hypertrophy (LVH)"
+    ], key="recg", label_visibility="collapsed")
+
+with col8:
+    st.markdown(tip("Max Heart Rate Achieved", "The highest your heart rate got during an exercise test.<br>A lower max HR for your age can be a warning sign.<br>Typical range: 60 – 202 bpm."), unsafe_allow_html=True)
+    max_hr = st.number_input("", min_value=50, max_value=220, value=150, key="mhr", label_visibility="collapsed")
+
+with col9:
+    st.markdown(tip("Exercise-Induced Angina", "Did you feel chest pain or tightness during physical activity?<br>Yes = Pain appeared during exercise.<br>No = No discomfort during exercise."), unsafe_allow_html=True)
+    exercise_angina = st.selectbox("", ["No", "Yes"], key="ea", label_visibility="collapsed")
+
+# Row 4
+col10, col11 = st.columns(2)
+
+with col10:
+    st.markdown(tip("Oldpeak (ST Depression)", "A measurement from your ECG during exercise compared to rest.<br>0 = No change (good).<br>1 – 2 = Mild change.<br>3+ = More significant, worth checking out."), unsafe_allow_html=True)
+    oldpeak = st.slider("", min_value=-3.0, max_value=7.0, value=1.0, step=0.1, key="op", label_visibility="collapsed")
+
+with col11:
+    st.markdown(tip("ST Slope", "How the ST segment on your ECG changes during peak exercise.<br>Up = Healthy response (good sign).<br>Flat = Neutral, might need attention.<br>Down = Could indicate reduced blood flow."), unsafe_allow_html=True)
+    st_slope = st.selectbox("", [
+        "Upsloping (Up)", "Flat", "Downsloping (Down)"
+    ], key="sl", label_visibility="collapsed")
 
 st.markdown('</div>', unsafe_allow_html=True)
-
 
 # ════════════════════════════════════════════════════════════════════════════
 #  PREDICT BUTTON
 # ════════════════════════════════════════════════════════════════════════════
-_, pb_col, _ = st.columns([1.6, 2, 1.4])
-with pb_col:
-    st.markdown('<div class="predict-btn">', unsafe_allow_html=True)
-    predict = st.button("🫀  Predict Now", key="predict_btn")
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("<br>", unsafe_allow_html=True)
+col_pred = st.columns([1, 2, 1])[1]
 
+with col_pred:
+    predict_clicked = st.button("🫀 Predict My Heart Health")
 
-# ════════════════════════════════════════════════════════════════════════════
-#  RESULT
-# ════════════════════════════════════════════════════════════════════════════
-if predict:
-    errs = []
-    if rbp < 80 or rbp > 220:   errs.append("Resting BP must be 80 – 220 mmHg.")
-    if chol < 0 or chol > 650:  errs.append("Cholesterol must be 0 – 650 mg/dL.")
-    if mhr < 50 or mhr > 220:   errs.append("Max Heart Rate must be 50 – 220 bpm.")
-
-    if errs:
-        for e in errs: st.error(f"❌ {e}")
-    elif not model_ready:
-        st.error("❌ Model not ready — please refresh the page.")
+if predict_clicked:
+    if not st.session_state.model_ready:
+        st.warning("⚠️ Please train the model first! Click **Train Model** above before predicting.")
     else:
-        try:
-            row = {"Age":age,"Sex":sex,"ChestPainType":cp,"RestingBP":rbp,
-                   "Cholesterol":chol,"FastingBS":fbs,"RestingECG":ecg,
-                   "MaxHR":mhr,"ExerciseAngina":ea,"Oldpeak":op,"ST_Slope":sl}
-            x_in   = encode_row(row, scaler)
-            pred   = model.predict(x_in)[0]
-            proba  = model.predict_proba(x_in)[0]
-            conf   = proba[pred] * 100
-            p0, p1 = proba[0]*100, proba[1]*100
+        # Input validation
+        errors = []
+        if resting_bp < 80 or resting_bp > 220:
+            errors.append("Resting BP should be between 80 and 220 mmHg.")
+        if cholesterol < 0 or cholesterol > 650:
+            errors.append("Cholesterol should be between 0 and 650 mg/dL.")
+        if max_hr < 50 or max_hr > 220:
+            errors.append("Max Heart Rate should be between 50 and 220 bpm.")
+        if cholesterol == 0:
+            st.warning("⚠️ Cholesterol is 0 — this likely means the value was missing in the source data. The prediction may be less reliable. Please enter your actual cholesterol reading if available.")
 
-            st.markdown("<br>", unsafe_allow_html=True)
+        if errors:
+            for err in errors:
+                st.error(f"❌ {err}")
+        else:
+            user_input = {
+                "Age": age, "Sex": sex, "ChestPainType": chest_pain,
+                "RestingBP": resting_bp, "Cholesterol": cholesterol,
+                "FastingBS": fasting_bs, "RestingECG": resting_ecg,
+                "MaxHR": max_hr, "ExerciseAngina": exercise_angina,
+                "Oldpeak": oldpeak, "ST_Slope": st_slope
+            }
 
-            if pred == 1:
-                st.markdown(f"""
-                <div class='result-danger'>
-                  <span class='result-emoji'>⚠️</span>
-                  <p class='result-title'>Heart Disease Risk Detected</p>
-                  <p class='result-sub'>Confidence: <b style='color:#ff6b6b;font-size:1.05rem;'>{conf:.1f}%</b>
-                  &nbsp;·&nbsp; Please speak with a cardiologist for a full evaluation.</p>
-                </div>""", unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div class='result-safe'>
-                  <span class='result-emoji'>✅</span>
-                  <p class='result-title'>No Heart Disease Detected</p>
-                  <p class='result-sub'>Confidence: <b style='color:#00d296;font-size:1.05rem;'>{conf:.1f}%</b>
-                  &nbsp;·&nbsp; Looking good — keep up those healthy habits!</p>
-                </div>""", unsafe_allow_html=True)
+            try:
+                input_scaled = encode_input(user_input, st.session_state.scaler, st.session_state.encoders)
+                prediction   = st.session_state.model.predict(input_scaled)[0]
+                probability  = st.session_state.model.predict_proba(input_scaled)[0]
+                confidence   = probability[prediction] * 100
 
-            st.markdown("<br>", unsafe_allow_html=True)
-            st.markdown('<div class="glass">', unsafe_allow_html=True)
-            st.markdown("<div class='sec-label'>Probability Breakdown</div>", unsafe_allow_html=True)
-            st.markdown(f"""
-            <div class='prob-row'>
-              <div class='prob-label'>No Disease</div>
-              <div class='prob-bar-bg'>
-                <div class='prob-bar-fill' style='width:{p0:.1f}%;background:linear-gradient(90deg,#00d296,#00cec9);'></div>
-              </div>
-              <div class='prob-pct' style='color:#00d296;'>{p0:.1f}%</div>
-            </div>
-            <div class='prob-row'>
-              <div class='prob-label'>Heart Disease</div>
-              <div class='prob-bar-bg'>
-                <div class='prob-bar-fill' style='width:{p1:.1f}%;background:linear-gradient(90deg,#ff6b6b,#fd79a8);'></div>
-              </div>
-              <div class='prob-pct' style='color:#ff6b6b;'>{p1:.1f}%</div>
-            </div>
-            <div class='chip-row'>
-              <div class='chip'><div class='chip-val'>{test_acc*100:.1f}%</div><div class='chip-lbl'>Model Accuracy</div></div>
-              <div class='chip'><div class='chip-val'>{cv_mean*100:.1f}%</div><div class='chip-lbl'>CV Score</div></div>
-              <div class='chip'><div class='chip-val'>918</div><div class='chip-lbl'>Training Patients</div></div>
-              <div class='chip'><div class='chip-val'>11</div><div class='chip-lbl'>Features</div></div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-        except Exception as e:
-            st.error(f"❌ Prediction failed: {e}")
+                if prediction == 1:
+                    st.markdown(f"""
+                    <div class='result-danger'>
+                        <span class='result-emoji'>⚠️</span>
+                        <p class='result-text'>Heart Disease Risk Detected</p>
+                        <p style='color:rgba(255,255,255,0.75);margin-top:10px;font-size:0.95rem;'>
+                            The model is <strong>{confidence:.1f}% confident</strong> based on the details you provided.
+                        </p>
+                        <p style='color:rgba(255,100,100,0.9);font-size:0.85rem;margin-top:8px;'>
+                            This doesn't mean you definitely have heart disease — please talk to a doctor for a proper check-up! 🏥
+                        </p>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div class='result-safe'>
+                        <span class='result-emoji'>✅</span>
+                        <p class='result-text'>No Heart Disease Detected</p>
+                        <p style='color:rgba(255,255,255,0.75);margin-top:10px;font-size:0.95rem;'>
+                            The model is <strong>{confidence:.1f}% confident</strong> — looking good based on your data!
+                        </p>
+                        <p style='color:rgba(72,219,251,0.9);font-size:0.85rem;margin-top:8px;'>
+                            Keep up the healthy habits — regular exercise, balanced diet, and annual check-ups go a long way! 💪
+                        </p>
+                    </div>""", unsafe_allow_html=True)
+
+                # Risk breakdown
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown('<p class="section-title">🔍 Probability Breakdown</p>', unsafe_allow_html=True)
+
+                pc1, pc2 = st.columns(2)
+                with pc1:
+                    st.markdown(f"""
+                    <div class='metric-badge'>
+                        <div class='metric-value' style='color:#48dbfb;'>{probability[0]*100:.1f}%</div>
+                        <div class='metric-label'>Probability: No Disease</div>
+                    </div>""", unsafe_allow_html=True)
+                with pc2:
+                    st.markdown(f"""
+                    <div class='metric-badge'>
+                        <div class='metric-value' style='color:#ff6b6b;'>{probability[1]*100:.1f}%</div>
+                        <div class='metric-label'>Probability: Heart Disease</div>
+                    </div>""", unsafe_allow_html=True)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.progress(int(probability[1] * 100))
+                st.caption(f"⬆️ Risk meter — {probability[1]*100:.1f}% toward heart disease risk")
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            except Exception as e:
+                st.error(f"❌ Prediction failed: {e}. Please check your inputs and try again.")
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  ABOUT
+#  ABOUT / DISCLAIMER
 # ════════════════════════════════════════════════════════════════════════════
-st.markdown('<div class="div-line"></div>', unsafe_allow_html=True)
-st.markdown('<div class="glass">', unsafe_allow_html=True)
-st.markdown("<div class='sec-label'>About This Project</div>", unsafe_allow_html=True)
+st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+st.markdown('<p class="section-title">📋 About This Project</p>', unsafe_allow_html=True)
 st.markdown("""
-<p style='font-size:0.88rem;color:rgba(255,255,255,0.62);line-height:1.8;'>
-  This system was built by
-  <span class='about-name'>Abdul Hannan</span>
-  <span class='about-name'>Dawood Rizwan</span>
-  <span class='about-name'>Muhammad Zaid</span>
-  — a team that wanted to make heart health screening more accessible through machine learning.
-</p>
-<p style='font-size:0.84rem;color:rgba(255,255,255,0.45);line-height:1.8;margin-top:6px;'>
-  The model was trained on <b style='color:#a29bfe;'>918 real patient records</b> using 11 clinical features
-  collected from cardiac evaluations — ECG readings, blood pressure, cholesterol, stress test outcomes, and more.
-  We ran five different models (Random Forest, Gradient Boosting, Logistic Regression, SVM, and KNN) and the system
-  <b style='color:#a29bfe;'>automatically picks the best one</b> using 5-fold cross-validation every time it starts —
-  so you're always getting the sharpest prediction available.
-</p>
-<p style='font-size:0.8rem;color:rgba(255,255,255,0.28);margin-top:8px;'>
-  Built with Streamlit · scikit-learn · Python &nbsp;|&nbsp; Dataset: Heart Failure Prediction (Kaggle, 918 patients)
-</p>
-""", unsafe_allow_html=True)
+Hey there! 👋 This project was built using a heart disease dataset from **Kaggle** 
+containing 918 real patient records. We trained several classification models and tuned them to 
+give the most accurate prediction possible.
+
+The features used are standard ones you'd get from a basic cardiac check-up — things like blood 
+pressure, cholesterol, ECG readings, and exercise stress test results.
+
+**Models we tested:** Random Forest · Gradient Boosting · Logistic Regression · SVM · KNN 
+**Dataset:** 918 rows × 12 features (Heart Failure Prediction Dataset""") 
+
+
 st.markdown('</div>', unsafe_allow_html=True)
