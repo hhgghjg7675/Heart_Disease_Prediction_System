@@ -262,7 +262,42 @@ label, .stSlider label { color: rgba(255,255,255,0.85) !important; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 header { visibility: hidden; }
-/* Restore the sidebar collapse button that lives inside the header */
+
+/* ── Sidebar toggle button — always visible ── */
+button[data-testid="collapsedControl"],
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+    z-index: 9999 !important;
+    position: fixed !important;
+    top: 14px !important;
+    left: 14px !important;
+    background: linear-gradient(135deg, #ff6b6b, #ff9ff3) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    width: 42px !important;
+    height: 42px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-shadow: 0 4px 18px rgba(255,107,107,0.55) !important;
+    cursor: pointer !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+button[data-testid="collapsedControl"]:hover,
+[data-testid="collapsedControl"]:hover {
+    transform: scale(1.12) !important;
+    box-shadow: 0 6px 24px rgba(255,107,107,0.75) !important;
+}
+button[data-testid="collapsedControl"] svg,
+[data-testid="collapsedControl"] svg {
+    fill: white !important;
+    color: white !important;
+    width: 20px !important;
+    height: 20px !important;
+}
+
+/* Also restore the expand button inside the header area */
 header button[data-testid="collapsedControl"] { visibility: visible !important; }
 
 /* scrollbar */
@@ -621,16 +656,6 @@ if st.session_state.model_ready:
         params_str = "  |  ".join([f"`{k}` = **{v}**" for k, v in st.session_state.best_params.items()])
         st.markdown(params_str)
 
-    # ── Confusion Matrix ──
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("**🔢 Confusion Matrix**")
-    cm_df = pd.DataFrame(
-        st.session_state.cm,
-        index=["Actual: No Disease", "Actual: Disease"],
-        columns=["Predicted: No Disease", "Predicted: Disease"]
-    )
-    st.dataframe(cm_df, use_container_width=True)
-
     # KNN note — single occurrence
     if st.session_state.model_name == "KNN":
         st.markdown("<br>", unsafe_allow_html=True)
@@ -811,21 +836,35 @@ if predict_clicked:
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  ABOUT / DISCLAIMER
+#  FOOTER
 # ════════════════════════════════════════════════════════════════════════════
 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-st.markdown('<p class="section-title">📋 About This Project</p>', unsafe_allow_html=True)
 st.markdown("""
-Hey there! 👋 This project was built using a heart disease dataset from **Kaggle** 
-containing 918 real patient records. We trained several classification models and tuned them to 
-give the most accurate prediction possible.
-
-The features used are standard ones you'd get from a basic cardiac check-up — things like blood 
-pressure, cholesterol, ECG readings, and exercise stress test results.
-
-**Models we tested:** Random Forest · Gradient Boosting · Logistic Regression · SVM · KNN 
-**Dataset:** 918 rows × 12 features (Heart Failure Prediction Dataset""") 
-
-
-st.markdown('</div>', unsafe_allow_html=True)
+<div style="
+    text-align: center;
+    padding: 28px 20px 20px;
+    color: rgba(255,255,255,0.45);
+    font-size: 0.85rem;
+    line-height: 2;
+">
+    <span style="font-size:1.4rem;">🫀</span><br>
+    <span style="
+        background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 700;
+        font-size: 1rem;
+    ">Heart Disease Prediction System</span><br>
+    <span style="color:rgba(255,255,255,0.5);">Made with ❤️ by <strong style="color:rgba(255,255,255,0.8);">Abdul Hanan</strong></span><br>
+    <a href="mailto:zafarhanan7@gmail.com" style="
+        color: #48dbfb;
+        text-decoration: none;
+        font-size: 0.82rem;
+        letter-spacing: 0.02em;
+    ">✉️ zafarhanan7@gmail.com</a><br><br>
+    <span style="color:rgba(255,255,255,0.3);font-size:0.78rem;">
+        © 2025 Abdul Hanan · All Rights Reserved
+    </span>
+</div>
+""", unsafe_allow_html=True)
