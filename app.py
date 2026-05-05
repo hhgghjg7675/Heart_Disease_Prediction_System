@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -307,7 +306,7 @@ def tip(label: str, hint: str) -> str:
 
 
 # ─── Load & Prepare Data ─────────────────────────────────────────────────────
-@st.cache_data
+@st.cache_resource
 def load_and_prepare_data():
     try:
         df = pd.read_csv("heart.csv")
@@ -331,8 +330,8 @@ def load_and_prepare_data():
 
 
 # ─── Train Model ────────────────────────────────────────────────────────────
-@st.cache_data   # cache_data is correct for serialisable return values
-def train_model(model_name: str, do_tuning: bool):
+@st.cache_resource   # cache_resource for ML model objects (not pickle-serialised)
+def train_model(model_name: str, do_tuning: bool, _cache_version: int = 0):
     X, y, encoders, _ = load_and_prepare_data()
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
@@ -481,75 +480,90 @@ st.markdown('''
 st.markdown('<p class="subtitle">Tell us a little about yourself and we\'ll do the rest — powered by Machine Learning</p>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════
-#  SIDEBAR — Model Settings
+#  SESSION STATE DEFAULTS
 # ════════════════════════════════════════════════════════════════════════════
-with st.sidebar:
-    st.markdown("## ⚙️ Model Settings")
-    st.markdown("---")
-
-    model_choice = st.selectbox(
-        "Choose a Machine Learning Model",
-        ["Random Forest", "Gradient Boosting", "Logistic Regression", "SVM", "KNN"],
-        help="Each model learns patterns differently. Random Forest is usually the most reliable to start with!"
-    )
-
-    do_tuning = st.toggle(
-        "🔧 Enable Hyperparameter Tuning",
-        value=False,
-        help="This tries many different settings to find the best ones. Takes a bit longer but worth it!"
-    )
-
-    if do_tuning:
-        st.info("⏳ Tuning is ON — training might take 30–60 seconds. Grab a coffee! ☕")
-
-    st.markdown("---")
-    st.markdown("### 📌 What is this app?")
-    st.markdown("""
-This tool uses real patient data to predict whether someone might have heart disease.
-Just fill in your health details on the right and hit **Predict**!
-
-> ⚠️ *This is a student project for educational purposes — not a medical diagnosis.*
-    """)
-
-    st.markdown("---")
-    st.markdown("### 🧠 Models Available")
-    st.markdown("""
-- 🌲 **Random Forest** — votes from many trees
-- 📈 **Gradient Boosting** — learns from mistakes step-by-step  
-- 📊 **Logistic Regression** — simple, fast, reliable  
-- 🔵 **SVM** — draws a boundary between healthy & at-risk  
-- 👣 **KNN** — predicts using similar past examples
-    """)
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  TRAIN MODEL SECTION
-# ════════════════════════════════════════════════════════════════════════════
-col_sidebar_btn, col_btn, col_status = st.columns([1, 1, 2])
-
-with col_sidebar_btn:
-    sidebar_clicked = st.button("☰ Open / Close Sidebar")
-
-with col_btn:
-    train_clicked = st.button("🚀 Train Model")
-
-# JS sidebar toggle — fires when button is clicked (during rerun)
-if sidebar_clicked:
-    components.html("""
-        <script>
-            const btn = window.parent.document.querySelector('[data-testid="collapsedControl"]');
-            if (btn) { btn.click(); }
-        </script>
-    """, height=0, width=0)
-
 if "model_ready" not in st.session_state:
     st.session_state.model_ready = False
+if "settings_open" not in st.session_state:
+    st.session_state.settings_open = False
+if "model_choice" not in st.session_state:
+    st.session_state.model_choice = "Random Forest"
+if "do_tuning" not in st.session_state:
+    st.session_state.do_tuning = False
+if "train_version" not in st.session_state:
+    st.session_state.train_version = 0  # incremented each time Train is clicked
+
+# ════════════════════════════════════════════════════════════════════════════
+#  TOP BUTTONS ROW
+# ════════════════════════════════════════════════════════════════════════════
+col_s, col_t, col_gap = st.columns([1, 1, 2])
+
+with col_s:
+    if st.button("⚙️ Model Settings", key="toggle_settings"):
+        st.session_state.settings_open = not st.session_state.settings_open
+        st.rerun()
+
+with col_t:
+    train_clicked = st.button("🚀 Train Model", key="train_btn")
+
+# ════════════════════════════════════════════════════════════════════════════
+#  SETTINGS PANEL (shown / hidden by button)
+# ════════════════════════════════════════════════════════════════════════════
+if st.session_state.settings_open:
+    st.markdown('<div class="glass-card" style="margin-top:1rem;">', unsafe_allow_html=True)
+    st.markdown('<p class="section-title">⚙️ Model Settings</p>', unsafe_allow_html=True)
+
+    sp1, sp2 = st.columns(2)
+
+    with sp1:
+        model_options = ["Random Forest", "Gradient Boosting", "Logistic Regression", "SVM", "KNN"]
+        selected_model = st.selectbox(
+            "🤖 Choose a Machine Learning Model",
+            model_options,
+            index=model_options.index(st.session_state.model_choice),
+            key="model_choice_widget",
+            help="Each model learns patterns differently. Random Forest is usually the most reliable to start with!"
+        )
+        st.session_state.model_choice = selected_model  # sync back to session state
+
+    with sp2:
+        tuning_on = st.toggle(
+            "🔧 Enable Hyperparameter Tuning",
+            value=st.session_state.do_tuning,
+            key="do_tuning_widget",
+            help="Tries many settings to find the best combination. Takes 30–60 seconds but improves accuracy!"
+        )
+        st.session_state.do_tuning = tuning_on  # sync back to session state
+        if st.session_state.do_tuning:
+            st.info("⏳ Tuning is ON — grab a coffee! ☕")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("**🧠 Models Available:**")
+    st.markdown("""
+- 🌲 **Random Forest** — votes from many decision trees
+- 📈 **Gradient Boosting** — learns from mistakes step-by-step
+- 📊 **Logistic Regression** — simple, fast, reliable
+- 🔵 **SVM** — draws a boundary between healthy & at-risk
+- 👣 **KNN** — predicts using similar past patient examples
+    """)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Use saved values for training
+model_choice = st.session_state.model_choice
+do_tuning    = st.session_state.do_tuning
+
+# ════════════════════════════════════════════════════════════════════════════
+#  TRAIN MODEL
+# ════════════════════════════════════════════════════════════════════════════
 
 if train_clicked:
+    st.session_state.train_version += 1   # bust the cache so re-training always runs
     with st.spinner(f"Training {model_choice}... hold tight! 🧠"):
         try:
             (model, scaler, encoders, acc, auc, cv_scores,
-             cv_biased, best_params, report, cm, n_train) = train_model(model_choice, do_tuning)
+             cv_biased, best_params, report, cm, n_train) = train_model(
+                model_choice, do_tuning, _cache_version=st.session_state.train_version
+            )
 
             st.session_state.model       = model
             st.session_state.scaler      = scaler
