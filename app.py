@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -221,15 +222,6 @@ div[data-testid="stSidebar"] {
 
 div[data-testid="stSidebar"] * { color: rgba(255,255,255,0.85) !important; }
 
-/* Keep sidebar collapse/expand button visible */
-button[data-testid="collapsedControl"],
-div[data-testid="collapsedControl"] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    color: white !important;
-}
-
 /* Ensure sidebar nav elements are visible */
 section[data-testid="stSidebar"] {
     display: block !important;
@@ -262,43 +254,6 @@ label, .stSlider label { color: rgba(255,255,255,0.85) !important; }
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 header { visibility: hidden; }
-
-/* ── Sidebar toggle button — always visible ── */
-button[data-testid="collapsedControl"],
-[data-testid="collapsedControl"] {
-    visibility: visible !important;
-    display: flex !important;
-    opacity: 1 !important;
-    z-index: 9999 !important;
-    position: fixed !important;
-    top: 14px !important;
-    left: 14px !important;
-    background: linear-gradient(135deg, #ff6b6b, #ff9ff3) !important;
-    border: none !important;
-    border-radius: 50% !important;
-    width: 42px !important;
-    height: 42px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    box-shadow: 0 4px 18px rgba(255,107,107,0.55) !important;
-    cursor: pointer !important;
-    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
-}
-button[data-testid="collapsedControl"]:hover,
-[data-testid="collapsedControl"]:hover {
-    transform: scale(1.12) !important;
-    box-shadow: 0 6px 24px rgba(255,107,107,0.75) !important;
-}
-button[data-testid="collapsedControl"] svg,
-[data-testid="collapsedControl"] svg {
-    fill: white !important;
-    color: white !important;
-    width: 20px !important;
-    height: 20px !important;
-}
-
-/* Also restore the expand button inside the header area */
-header button[data-testid="collapsedControl"] { visibility: visible !important; }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 6px; }
@@ -517,7 +472,12 @@ def encode_input(row: dict, scaler, encoders):
 # ════════════════════════════════════════════════════════════════════════════
 #  HEADER
 # ════════════════════════════════════════════════════════════════════════════
-st.markdown('<h1 class="main-title">🫀 Heart Disease Prediction System</h1>', unsafe_allow_html=True)
+st.markdown('''
+<h1 style="text-align:center;font-size:2.6rem;font-weight:700;margin-bottom:0.2rem;animation:titleFade 1.2s ease-in;">
+    <span style="-webkit-text-fill-color:initial;background:none;">🫀</span>
+    <span class="main-title" style="font-size:inherit;font-weight:inherit;">Heart Disease Prediction System</span>
+</h1>
+''', unsafe_allow_html=True)
 st.markdown('<p class="subtitle">Tell us a little about yourself and we\'ll do the rest — powered by Machine Learning</p>', unsafe_allow_html=True)
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -565,10 +525,22 @@ Just fill in your health details on the right and hit **Predict**!
 # ════════════════════════════════════════════════════════════════════════════
 #  TRAIN MODEL SECTION
 # ════════════════════════════════════════════════════════════════════════════
-col_btn, col_status = st.columns([1, 3])
+col_sidebar_btn, col_btn, col_status = st.columns([1, 1, 2])
+
+with col_sidebar_btn:
+    sidebar_clicked = st.button("☰ Open / Close Sidebar")
 
 with col_btn:
     train_clicked = st.button("🚀 Train Model")
+
+# JS sidebar toggle — fires when button is clicked (during rerun)
+if sidebar_clicked:
+    components.html("""
+        <script>
+            const btn = window.parent.document.querySelector('[data-testid="collapsedControl"]');
+            if (btn) { btn.click(); }
+        </script>
+    """, height=0, width=0)
 
 if "model_ready" not in st.session_state:
     st.session_state.model_ready = False
